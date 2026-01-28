@@ -2,7 +2,10 @@ export type Hand = 'L' | 'R';
 
 export type NoteValue = 'whole' | 'half' | 'quarter' | 'eighth' | 'sixteenth' | 'eighth-triplet' | 'sixteenth-triplet';
 
-export type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8';
+export type TimeSignature = '4/4' | '3/4' | '2/4' | '6/8' | '5/4' | '7/4' | '9/8';
+
+// Pattern variant types for the expanded pattern system
+export type PatternVariant = 'pattern-pattern' | 'reversal-reversal' | 'pattern-reversal';
 
 export type ClickMode = 'every-note' | 'quarter-only';
 
@@ -16,7 +19,10 @@ export const TIME_SIGNATURE_CONFIGS: Record<TimeSignature, TimeSignatureConfig> 
   '4/4': { beatsPerMeasure: 4, beatUnit: 4, isCompound: false },
   '3/4': { beatsPerMeasure: 3, beatUnit: 4, isCompound: false },
   '2/4': { beatsPerMeasure: 2, beatUnit: 4, isCompound: false },
+  '5/4': { beatsPerMeasure: 5, beatUnit: 4, isCompound: false },
+  '7/4': { beatsPerMeasure: 7, beatUnit: 4, isCompound: false },
   '6/8': { beatsPerMeasure: 6, beatUnit: 8, isCompound: true },
+  '9/8': { beatsPerMeasure: 9, beatUnit: 8, isCompound: true },
 };
 
 export interface GeneratedPattern {
@@ -80,12 +86,12 @@ export function getCompatibleNoteValues(timeSignature: TimeSignature): NoteValue
   const config = TIME_SIGNATURE_CONFIGS[timeSignature];
 
   if (config.isCompound) {
-    // For compound time (6/8), triplet-based divisions are natural
+    // For compound time (6/8, 9/8), triplet-based divisions are natural
     // but we also allow regular subdivisions
     return ['quarter', 'eighth', 'sixteenth', 'eighth-triplet', 'sixteenth-triplet'];
   }
 
-  // For simple time signatures
+  // For simple time signatures (including odd meters like 5/4, 7/4)
   return ['whole', 'half', 'quarter', 'eighth', 'sixteenth', 'eighth-triplet', 'sixteenth-triplet'];
 }
 

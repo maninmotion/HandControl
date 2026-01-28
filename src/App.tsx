@@ -128,7 +128,6 @@ const App: React.FC = () => {
             totalPatterns={totalPatterns}
             compatibleNoteValues={compatibleNoteValues}
             onTogglePlay={togglePlay}
-            onStop={stop}
             onBpmChange={setBpm}
             onNoteValueChange={setNoteValue}
             onTimeSignatureChange={setTimeSignature}

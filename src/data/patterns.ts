@@ -1,6 +1,9 @@
-import { Hand, GeneratedPattern, TwoMeasurePattern } from '../types';
+import { Hand, GeneratedPattern, TwoMeasurePattern, PatternVariant } from '../types';
 
 export type PatternMode = 'sequential' | 'random';
+
+// Each base pattern has 3 variants
+export const VARIANTS_PER_PATTERN = 3;
 
 /**
  * Generates a pattern at the given index using bit manipulation.
@@ -50,6 +53,54 @@ export function createTwoMeasurePattern(pattern: GeneratedPattern): TwoMeasurePa
     measure1: pattern,
     measure2: reversePattern(pattern),
   };
+}
+
+/**
+ * Creates a two-measure pattern based on the variant type:
+ * - 'pattern-pattern': same pattern in both measures
+ * - 'reversal-reversal': reversed pattern in both measures
+ * - 'pattern-reversal': original then reversed
+ */
+export function createTwoMeasurePatternVariant(
+  pattern: GeneratedPattern,
+  variant: PatternVariant
+): TwoMeasurePattern {
+  const reversed = reversePattern(pattern);
+
+  switch (variant) {
+    case 'pattern-pattern':
+      return { measure1: pattern, measure2: pattern };
+    case 'reversal-reversal':
+      return { measure1: reversed, measure2: reversed };
+    case 'pattern-reversal':
+      return { measure1: pattern, measure2: reversed };
+  }
+}
+
+/**
+ * Gets the variant type from a combined index (0-2 maps to the 3 variants)
+ */
+export function getVariantFromIndex(variantIndex: number): PatternVariant {
+  const variants: PatternVariant[] = ['pattern-pattern', 'reversal-reversal', 'pattern-reversal'];
+  return variants[variantIndex % VARIANTS_PER_PATTERN];
+}
+
+/**
+ * Converts a combined pattern index to base pattern index and variant
+ * Combined index = basePatternIndex * 3 + variantIndex
+ */
+export function decomposePatternIndex(combinedIndex: number): { baseIndex: number; variantIndex: number } {
+  return {
+    baseIndex: Math.floor(combinedIndex / VARIANTS_PER_PATTERN),
+    variantIndex: combinedIndex % VARIANTS_PER_PATTERN,
+  };
+}
+
+/**
+ * Combines a base pattern index and variant index into a single combined index
+ */
+export function composePatternIndex(baseIndex: number, variantIndex: number): number {
+  return baseIndex * VARIANTS_PER_PATTERN + variantIndex;
 }
 
 /**
@@ -103,10 +154,30 @@ export function getPatternDisplayName(pattern: GeneratedPattern): string {
 }
 
 /**
- * Gets the total number of unique patterns for a given measure length
+ * Returns a display name for a pattern variant
+ */
+export function getVariantDisplayName(combinedIndex: number, notesInMeasure: number): string {
+  const { baseIndex, variantIndex } = decomposePatternIndex(combinedIndex);
+  const normalizedBase = ((baseIndex % getBasePatternCount(notesInMeasure)) + getBasePatternCount(notesInMeasure)) % getBasePatternCount(notesInMeasure);
+  const pattern = getPatternAtIndex(normalizedBase, notesInMeasure);
+  const baseName = getPatternDisplayName(pattern);
+
+  const variantLabels = ['(×2)', '(Rev ×2)', '(+ Rev)'];
+  return `${baseName} ${variantLabels[variantIndex]}`;
+}
+
+/**
+ * Gets the total number of base patterns for a given measure length
+ */
+export function getBasePatternCount(length: number): number {
+  return Math.pow(2, length);
+}
+
+/**
+ * Gets the total number of pattern variants (base patterns × 3) for a given measure length
  */
 export function getTotalPatterns(length: number): number {
-  return Math.pow(2, length);
+  return getBasePatternCount(length) * VARIANTS_PER_PATTERN;
 }
 
 /**

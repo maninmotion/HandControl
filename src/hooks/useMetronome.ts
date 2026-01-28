@@ -10,11 +10,14 @@ import {
 } from '../types';
 import {
   getPatternAtIndex,
-  createTwoMeasurePattern,
-  getPatternDisplayName,
+  createTwoMeasurePatternVariant,
+  getVariantDisplayName,
   getTotalPatterns,
   getRandomPatternIndex,
   normalizePatternIndex,
+  decomposePatternIndex,
+  getVariantFromIndex,
+  getBasePatternCount,
   PatternMode,
 } from '../data/patterns';
 
@@ -97,28 +100,34 @@ export function useMetronome(): UseMetronomeReturn {
     [timeSignature]
   );
 
-  // Generate current and next two-measure patterns
+  // Generate current and next two-measure patterns using the variant system
   const currentTwoMeasure = useMemo(() => {
     const normalizedIndex = normalizePatternIndex(currentPatternIndex, notesInMeasure);
-    const pattern = getPatternAtIndex(normalizedIndex, notesInMeasure);
-    return createTwoMeasurePattern(pattern);
+    const { baseIndex, variantIndex } = decomposePatternIndex(normalizedIndex);
+    const normalizedBase = ((baseIndex % getBasePatternCount(notesInMeasure)) + getBasePatternCount(notesInMeasure)) % getBasePatternCount(notesInMeasure);
+    const pattern = getPatternAtIndex(normalizedBase, notesInMeasure);
+    const variant = getVariantFromIndex(variantIndex);
+    return createTwoMeasurePatternVariant(pattern, variant);
   }, [currentPatternIndex, notesInMeasure]);
 
   const nextTwoMeasure = useMemo(() => {
     const normalizedIndex = normalizePatternIndex(nextPatternIndex, notesInMeasure);
-    const pattern = getPatternAtIndex(normalizedIndex, notesInMeasure);
-    return createTwoMeasurePattern(pattern);
+    const { baseIndex, variantIndex } = decomposePatternIndex(normalizedIndex);
+    const normalizedBase = ((baseIndex % getBasePatternCount(notesInMeasure)) + getBasePatternCount(notesInMeasure)) % getBasePatternCount(notesInMeasure);
+    const pattern = getPatternAtIndex(normalizedBase, notesInMeasure);
+    const variant = getVariantFromIndex(variantIndex);
+    return createTwoMeasurePatternVariant(pattern, variant);
   }, [nextPatternIndex, notesInMeasure]);
 
-  // Get pattern names
+  // Get pattern names (includes variant info)
   const currentPatternName = useMemo(
-    () => getPatternDisplayName(currentTwoMeasure.measure1),
-    [currentTwoMeasure]
+    () => getVariantDisplayName(normalizePatternIndex(currentPatternIndex, notesInMeasure), notesInMeasure),
+    [currentPatternIndex, notesInMeasure]
   );
 
   const nextPatternName = useMemo(
-    () => getPatternDisplayName(nextTwoMeasure.measure1),
-    [nextTwoMeasure]
+    () => getVariantDisplayName(normalizePatternIndex(nextPatternIndex, notesInMeasure), notesInMeasure),
+    [nextPatternIndex, notesInMeasure]
   );
 
   // Initialize engine
