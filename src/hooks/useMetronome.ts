@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { MetronomeEngine } from '../audio/MetronomeEngine';
+import { debug } from '../config';
 import {
   NoteValue,
   TimeSignature,
@@ -79,6 +80,19 @@ export function useMetronome(): UseMetronomeReturn {
   const [currentPatternIndex, setCurrentPatternIndex] = useState(0);
   const [nextPatternIndex, setNextPatternIndex] = useState(1);
 
+  // Refs to track values for use in callbacks (avoids stale closure issues)
+  const nextPatternRef = useRef(1);
+  const currentRepeatRef = useRef(1);
+
+  // Keep currentRepeatRef in sync with state
+  currentRepeatRef.current = currentRepeat;
+
+  // Track which transition we've processed to prevent double-firing
+  const lastProcessedCurrentRef = useRef(-1);
+
+  // DEBUG: Log state changes
+  debug.log('RENDER - currentPatternIndex:', currentPatternIndex, 'nextPatternIndex:', nextPatternIndex, 'currentRepeat:', currentRepeat);
+
   // Calculate notes in measure based on time signature
   const notesInMeasure = useMemo(
     () => getNotesPerMeasureForTimeSignature(noteValue, timeSignature),
@@ -156,24 +170,48 @@ export function useMetronome(): UseMetronomeReturn {
         setCurrentBeatIndex(beatIndex);
       },
       onMeasureComplete: () => {
-        // Called after both measures complete (2 measures worth of notes)
-        setCurrentRepeat((prev) => {
-          if (prev >= repeatCount) {
-            // Completed all repeats, advance to next pattern
-            setCurrentPatternIndex((idx) => {
-              if (patternMode === 'random') {
-                const newIdx = getRandomPatternIndex(notesInMeasure);
-                setNextPatternIndex(getRandomPatternIndex(notesInMeasure));
-                return newIdx;
-              }
-              const newIdx = normalizePatternIndex(idx + 1, notesInMeasure);
-              setNextPatternIndex(normalizePatternIndex(newIdx + 1, notesInMeasure));
-              return newIdx;
-            });
-            return 1;
+        const currentRepeatValue = currentRepeatRef.current;
+        debug.log('=== onMeasureComplete CALLED ===');
+        debug.log('currentRepeatRef:', currentRepeatValue, 'repeatCount:', repeatCount);
+
+        // Check if we need to advance to next pattern
+        if (currentRepeatValue >= repeatCount) {
+          debug.log('TRANSITION TRIGGERED');
+
+          // Get the next pattern that should become current
+          const oldNext = nextPatternRef.current;
+          debug.log('oldNext (will become current):', oldNext);
+
+          // Guard against double-firing
+          if (lastProcessedCurrentRef.current === oldNext) {
+            debug.log('GUARD TRIGGERED - skipping duplicate');
+            return;
           }
-          return prev + 1;
-        });
+          lastProcessedCurrentRef.current = oldNext;
+
+          // Calculate new next
+          let newNext: number;
+          if (patternMode === 'random') {
+            newNext = getRandomPatternIndex(notesInMeasure);
+          } else {
+            newNext = normalizePatternIndex(oldNext + 1, notesInMeasure);
+          }
+          debug.log('newNext calculated:', newNext);
+
+          // Update ref BEFORE state updates
+          nextPatternRef.current = newNext;
+
+          // Update all state together
+          debug.log('Setting currentPatternIndex to:', oldNext);
+          debug.log('Setting nextPatternIndex to:', newNext);
+          setCurrentPatternIndex(oldNext);
+          setNextPatternIndex(newNext);
+          setCurrentRepeat(1);
+        } else {
+          // Just increment the repeat counter
+          debug.log('Incrementing repeat to:', currentRepeatValue + 1);
+          setCurrentRepeat(currentRepeatValue + 1);
+        }
       },
     });
   }, [repeatCount, patternMode, notesInMeasure]);
@@ -211,6 +249,8 @@ export function useMetronome(): UseMetronomeReturn {
 
   // Reset pattern indices when notes in measure changes
   useEffect(() => {
+    nextPatternRef.current = 1;
+    lastProcessedCurrentRef.current = -1;
     setCurrentPatternIndex(0);
     setNextPatternIndex(1);
     setCurrentRepeat(1);
@@ -257,7 +297,9 @@ export function useMetronome(): UseMetronomeReturn {
   const setPatternMode = useCallback((mode: PatternMode) => {
     setPatternModeState(mode);
     if (mode === 'random') {
-      setNextPatternIndex(getRandomPatternIndex(notesInMeasure));
+      const newNext = getRandomPatternIndex(notesInMeasure);
+      nextPatternRef.current = newNext;
+      setNextPatternIndex(newNext);
     }
   }, [notesInMeasure]);
 
@@ -271,14 +313,19 @@ export function useMetronome(): UseMetronomeReturn {
 
   const jumpToPattern = useCallback((index: number) => {
     const normalized = normalizePatternIndex(index, notesInMeasure);
+    const nextNormalized = normalizePatternIndex(normalized + 1, notesInMeasure);
+    nextPatternRef.current = nextNormalized;
+    lastProcessedCurrentRef.current = -1;
     setCurrentPatternIndex(normalized);
-    setNextPatternIndex(normalizePatternIndex(normalized + 1, notesInMeasure));
+    setNextPatternIndex(nextNormalized);
     setCurrentRepeat(1);
   }, [notesInMeasure]);
 
   const reset = useCallback(() => {
     stop();
     setCurrentBeatIndex(0);
+    nextPatternRef.current = 1;
+    lastProcessedCurrentRef.current = -1;
     setCurrentPatternIndex(0);
     setNextPatternIndex(1);
     setCurrentRepeat(1);

@@ -80,41 +80,40 @@ const App: React.FC = () => {
         </span>
       </header>
 
-      <main className="app-main">
-        <div className="pattern-row">
-          {/* Current Pattern Pane */}
-          <div className="current-pattern-pane">
-            <div className="pane-label">Current</div>
-            <TwoMeasureDisplay
-              measure1Sticking={currentTwoMeasure.measure1.sticking}
-              measure2Sticking={currentTwoMeasure.measure2.sticking}
-              currentBeatIndex={currentBeatIndex}
-              isActive={true}
-              isPlaying={isPlaying}
-              patternName={currentPatternName}
-              noteValue={noteValue}
-              timeSignature={timeSignature}
-              repeatInfo={`${currentRepeat} / ${repeatCount}`}
-            />
-          </div>
-
-          {/* Next Pattern Pane */}
-          <div className="next-pattern-pane">
-            <div className="pane-label">Next</div>
-            <TwoMeasureDisplay
-              measure1Sticking={nextTwoMeasure.measure1.sticking}
-              measure2Sticking={nextTwoMeasure.measure2.sticking}
-              currentBeatIndex={-1}
-              isActive={false}
-              isPlaying={false}
-              patternName={nextPatternName}
-              noteValue={noteValue}
-              timeSignature={timeSignature}
-            />
-          </div>
+      <main className="app-main vertical-layout">
+        {/* Current Pattern Pane */}
+        <div className="current-pattern-pane">
+          <div className="pane-label">Current</div>
+          <TwoMeasureDisplay
+            measure1Sticking={currentTwoMeasure.measure1.sticking}
+            measure2Sticking={currentTwoMeasure.measure2.sticking}
+            currentBeatIndex={currentBeatIndex}
+            isActive={true}
+            isPlaying={isPlaying}
+            patternName={currentPatternName}
+            noteValue={noteValue}
+            timeSignature={timeSignature}
+            repeatInfo={`${currentRepeat} / ${repeatCount}`}
+          />
         </div>
 
-        <div className="controls-row">
+        {/* Next Pattern Pane */}
+        <div className="next-pattern-pane">
+          <div className="pane-label">Next</div>
+          <TwoMeasureDisplay
+            measure1Sticking={nextTwoMeasure.measure1.sticking}
+            measure2Sticking={nextTwoMeasure.measure2.sticking}
+            currentBeatIndex={-1}
+            isActive={false}
+            isPlaying={false}
+            patternName={nextPatternName}
+            noteValue={noteValue}
+            timeSignature={timeSignature}
+          />
+        </div>
+
+        {/* Controls Pane */}
+        <div className="controls-pane">
           <Controls
             isPlaying={isPlaying}
             bpm={bpm}

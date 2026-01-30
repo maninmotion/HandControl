@@ -1,0 +1,255 @@
+================================================================================
+HAND CONTROL - DEBUG DOCUMENTATION
+================================================================================
+
+PROJECT STRUCTURE
+================================================================================
+
+src/
+├── App.tsx              # Main UI component - renders Current pane, Next pane, Controls
+├── App.css              # Styles for layout
+├── types.ts             # TypeScript type definitions and constants
+├── hooks/
+│   └── useMetronome.ts  # **THE KEY FILE** - manages all state and pattern logic
+├── components/
+│   ├── Controls.tsx     # UI controls (BPM, volume, etc.)
+│   ├── Controls.css
+│   ├── MeasureDisplay.tsx  # Renders the musical notation
+│   └── MeasureDisplay.css
+├── data/
+│   └── patterns.ts      # Pattern generation functions (bit manipulation)
+└── audio/
+    └── MetronomeEngine.ts  # Web Audio API - plays clicks, fires callbacks
+
+
+================================================================================
+HOW THE PATTERN QUEUE SHOULD WORK
+================================================================================
+
+STATE VARIABLES (in useMetronome.ts):
+-------------------------------------
+- currentPatternIndex : The pattern currently displayed in "Current" pane
+- nextPatternIndex    : The pattern displayed in "Next" pane
+- currentRepeat       : Which repeat we're on (1 to repeatCount)
+- repeatCount         : How many times to repeat before advancing
+
+EXPECTED FLOW (with repeatCount=1):
+-----------------------------------
+Start:     currentPatternIndex=0, nextPatternIndex=1
+After 1st: currentPatternIndex=1, nextPatternIndex=2  (Next becomes Current)
+After 2nd: currentPatternIndex=2, nextPatternIndex=3
+After 3rd: currentPatternIndex=3, nextPatternIndex=4
+
+WHAT'S ACTUALLY HAPPENING (THE BUG):
+------------------------------------
+Start:     currentPatternIndex=0, nextPatternIndex=1
+After 1st: currentPatternIndex=2, nextPatternIndex=3  (SKIPPING 1!)
+After 2nd: currentPatternIndex=4, nextPatternIndex=5
+After 3rd: currentPatternIndex=6, nextPatternIndex=7
+
+
+================================================================================
+THE KEY CODE FLOW
+================================================================================
+
+File: src/hooks/useMetronome.ts
+
+The MetronomeEngine (audio) calls onMeasureComplete() when both measures
+finish playing. This callback is defined around line 158:
+
+```javascript
+onMeasureComplete: () => {
+  setCurrentRepeat((prev) => {
+    if (prev >= repeatCount) {
+      // THIS IS WHERE THE TRANSITION HAPPENS
+      const oldNext = nextPatternRef.current;  // Read the "next" pattern
+
+      // Guard against double-firing
+      if (lastProcessedCurrentRef.current === oldNext) {
+        return 1; // Already processed, skip
+      }
+      lastProcessedCurrentRef.current = oldNext;
+
+      // Calculate new "next"
+      let newNext = normalizePatternIndex(oldNext + 1, notesInMeasure);
+
+      // Update ref for next transition
+      nextPatternRef.current = newNext;
+
+      // Update state (this triggers UI re-render)
+      setCurrentPatternIndex(oldNext);   // Current = what was Next
+      setNextPatternIndex(newNext);      // Next = oldNext + 1
+
+      return 1;  // Reset repeat counter
+    }
+    return prev + 1;  // Increment repeat counter
+  });
+}
+```
+
+
+================================================================================
+HOW TO DEBUG IN FIREFOX
+================================================================================
+
+1. Open the app at http://localhost:5174/
+
+2. Open Developer Tools: Press F12 or right-click -> "Inspect"
+
+3. Go to Console tab
+
+4. Set repeats to 1 using the Repeats slider
+
+5. Press Play and watch the console output
+
+
+================================================================================
+WHAT TO LOOK FOR IN CONSOLE
+================================================================================
+
+ON EACH RENDER, YOU'LL SEE:
+---------------------------
+RENDER - currentPatternIndex: 0 nextPatternIndex: 1 currentRepeat: 1
+
+
+WHEN THE TWO MEASURES FINISH PLAYING, YOU'LL SEE:
+-------------------------------------------------
+=== onMeasureComplete CALLED ===
+nextPatternRef.current: 1
+lastProcessedCurrentRef.current: -1
+setCurrentRepeat callback - prev: 1 repeatCount: 1
+TRANSITION: oldNext = 1
+newNext calculated: 2
+Updated nextPatternRef.current to: 2
+Calling setCurrentPatternIndex(1)
+Calling setNextPatternIndex(2)
+
+
+IF IT'S DOUBLE-FIRING (THE BUG), YOU MIGHT SEE:
+-----------------------------------------------
+=== onMeasureComplete CALLED ===
+... (first call)
+=== onMeasureComplete CALLED ===
+... (second call - should trigger GUARD)
+
+
+================================================================================
+KEY QUESTIONS FOR DEBUGGING
+================================================================================
+
+1. Is onMeasureComplete being called multiple times?
+   Look for multiple "=== onMeasureComplete CALLED ===" entries per cycle.
+
+2. What value is in nextPatternRef.current when it's read?
+   If it says 2 when it should be 1, something is updating the ref before
+   the callback runs.
+
+3. Is the guard triggering correctly?
+   Look for "GUARD TRIGGERED - skipping duplicate transition"
+
+4. What does "setCurrentRepeat callback - prev:" show?
+   If prev is being called with unexpected values, React might be batching
+   strangely.
+
+
+================================================================================
+FILES TO EXAMINE IN VS CODE
+================================================================================
+
+PRIMARY FILE (where the bug likely is):
+---------------------------------------
+src/hooks/useMetronome.ts
+- Lines 77-90: Ref declarations
+- Lines 150-200: onMeasureComplete callback (the transition logic)
+
+SECONDARY FILE (calls the callback):
+------------------------------------
+src/audio/MetronomeEngine.ts
+- Line ~180: Where onMeasureComplete is called
+- The callback is scheduled with setTimeout, fired when beatIndex equals
+  the last beat of the two-measure cycle
+
+
+================================================================================
+SUMMARY OF CHANGES MADE THIS SESSION
+================================================================================
+
+1. PATTERN VARIANTS (Working)
+   Files: types.ts, patterns.ts, useMetronome.ts
+
+   Each base pattern now has 3 variants:
+   - Variant 0: Pattern x 2 (same in both measures)
+   - Variant 1: Reversal x 2 (reversed in both measures)
+   - Variant 2: Pattern + Reversal (original + reversed)
+
+   Total patterns = base patterns x 3 = 768 for 8th notes in 4/4
+
+
+2. ODD TIME SIGNATURES (Working)
+   Files: types.ts, Controls.tsx
+
+   Added 5/4, 7/4, 9/8 to dropdown.
+
+
+3. VERTICAL LAYOUT (Working)
+   Files: App.tsx, App.css
+
+   Changed from side-by-side to stacked: Current -> Next -> Controls
+
+
+4. PATTERN QUEUE FIX ATTEMPTS (THE BUG)
+   File: useMetronome.ts lines ~77-90 and ~158-200
+
+   ORIGINAL CODE (before changes):
+   ```javascript
+   setCurrentPatternIndex((idx) => {
+     const newIdx = normalizePatternIndex(idx + 1, notesInMeasure);
+     setNextPatternIndex(normalizePatternIndex(newIdx + 1, notesInMeasure));
+     return newIdx;
+   });
+   ```
+
+   MY ATTEMPTED FIX:
+   ```javascript
+   const oldNext = nextPatternRef.current;  // Read from ref
+   setCurrentPatternIndex(oldNext);         // Current = what was Next
+   setNextPatternIndex(oldNext + 1);        // Next = oldNext + 1
+   ```
+
+   The bug: onMeasureComplete appears to be called twice, or the ref value
+   is wrong when read.
+
+
+================================================================================
+REACT CONCEPTS FOR DEBUGGING
+================================================================================
+
+STATE (useState):
+-----------------
+React state triggers re-renders when changed. When you call setCurrentPatternIndex(1),
+React schedules a re-render with the new value. Multiple setState calls in the same
+function are "batched" - they all apply before the next render.
+
+REFS (useRef):
+--------------
+Refs are mutable containers that persist across renders but DON'T trigger re-renders.
+We use nextPatternRef to store the "next" pattern index so the callback can read
+the current value without being affected by stale closures.
+
+CLOSURES:
+---------
+When a function is created inside another function, it "captures" the variables
+from the outer scope. The onMeasureComplete callback is created inside a useEffect,
+so it captures the values of variables at that moment. This is why we use refs -
+to get the CURRENT value, not the captured value.
+
+EFFECTS (useEffect):
+--------------------
+Effects run AFTER the render. The callback setup effect runs when repeatCount,
+patternMode, or notesInMeasure changes. It creates a new callback function with
+the new values captured in its closure.
+
+
+================================================================================
+END OF DEBUG DOCUMENTATION
+================================================================================
